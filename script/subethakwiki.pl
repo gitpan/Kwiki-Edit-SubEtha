@@ -62,17 +62,6 @@ sub open_see {
     tell_see(map qq{
       click menu item "$_" of menu "Window"
       try
-        tell menu bar item "Format"
-          tell menu "Format"
-            tell menu item "File Encodings"
-              tell menu "File Encodings"
-                click menu item "Unicode (UTF-8)"
-              end tell
-            end tell
-          end tell
-        end tell
-      end try
-      try
         click menu item "Announce" of menu "File"
         tell menu bar item "File"
           tell menu "File"

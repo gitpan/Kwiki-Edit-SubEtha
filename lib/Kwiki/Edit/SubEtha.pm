@@ -1,5 +1,5 @@
 package Kwiki::Edit::SubEtha;
-$Kwiki::Edit::SubEtha::VERSION = '0.01';
+$Kwiki::Edit::SubEtha::VERSION = '0.02';
 
 use strict;
 use warnings;
@@ -12,8 +12,8 @@ Kwiki::Edit::SubEtha - SubEthaEdit Plugin for Kwiki
 
 =head1 VERSION
 
-This document describes version 0.01 of Kwiki::Edit::SubEtha, released
-July 26, 2004.
+This document describes version 0.02 of Kwiki::Edit::SubEtha, released
+July 27, 2004.
 
 =head1 SYNOPSIS
 
@@ -114,23 +114,33 @@ sub edit_see_start {
 sub is_shared {
     my $page = $self->pages->current;
 
-    $self->hub->load_class('archive')->svk(
-        $self,
-        list => [ "//edits/".$page->id ],
-    ) !~ /\S/;
+    my $handle = $self->hub->load_class('archive')->svk_handle($self);
+    my $fs = ($handle->{xd}->find_repos('//', 1))[2]->fs;
+    my $root = $fs->revision_root($fs->youngest_rev);
+
+    return($root->check_path("/edits/".$page->id) != $SVN::Node::none);
 }
 
 sub share_page {
     my $page = $self->pages->current;
 
-    $self->hub->load_class('archive')->svk(
-        $self,
-        mkdir => [ -m => 'shared from subetha', "//edits/".$page->id ],
-    );
+    my $handle = $self->hub->load_class('archive')->svk_handle($self);
+    my $fs = ($handle->{xd}->find_repos('//', 1))[2]->fs;
+    my $txn = $fs->begin_txn($fs->youngest_rev);
+    my $root = $txn->root;
+    my $lock = "/edits/".$page->id;
+
+    if ($root->check_path($lock) == $SVN::Node::none) {
+        my $pool = SVN::Pool->new_default;
+        $root->make_dir($lock, $pool);
+        $txn->commit;
+        $pool->clear;
+    }
 }
 
 sub is_macosx {
-    $ENV{HTTP_USER_AGENT} =~ /Mac OS X|Mac_PowerPC/;
+    $ENV{HTTP_USER_AGENT}
+      and $ENV{HTTP_USER_AGENT} =~ /Mac OS X|Mac_PowerPC/;
 }
 
 package Kwiki::Edit::SubEtha::CGI;
@@ -236,37 +246,41 @@ __template/tt2/edit_see_share_button.html__
 [% INCLUDE edit_see_join_button_icon.html %]
 </a>
 [% ELSE %]
+[% IF page_name != hub.config.main_page %]
 <a href="[% script_name %]?action=edit_see_share&page_id=[% page_uri %]" title="Edit This Page with SubEthaEdit">
 [% INCLUDE edit_see_share_button_icon.html %]
 </a>
+[% END %]
 [% END %]
 <!-- END edit_button.html -->
 [% END %]
 __template/tt2/edit_see_share_button_icon.html__
 <!-- BEGIN edit_see_share_button_icon.html -->
-SEE Share
+SubEtha Edit
 <!-- END edit_see_share_button_icon.html -->
 
 __icons/gnome/template/edit_see_share_button_icon.html__
 <!-- BEGIN edit_see_share_button_icon.html -->
-<img src="icons/gnome/image/edit_see_share.png" alt="SEE Share" />
+<img src="icons/gnome/image/edit_see_share.png" alt="SubEtha Edit" />
 <!-- END edit_see_share_button_icon.html -->
 
 __template/tt2/edit_see_share_content.html__
 <!-- BEGIN edit_see_share_content.html -->
-<p>
 [% IF locked %]
+<p>
 <b>This page has been temporarily locked for use in SubEthaEdit.</b>
+</p>
 [% ELSE %]
 <form action="[% script_name %]" method="POST">
+<p>
 Click
     <input type="hidden" name="action" value="edit_see_start" />
     <input type="hidden" name="page_id" value="[% page_id %]" />
     <input type="submit" value="Share this page" />
 to start using SubEthaEdit to edit this page.
+</p>
 </form>
 [% END %]
-</p>
 
 <p>
 SubEthaEdit is a collaborative text editor that allows many authors to
@@ -332,12 +346,12 @@ bAsS4HEKTqtgcpBmD2OolAMKSLoEWhnzpIrwJwiJpIgV1zNoZ5gG1Ety2hd4WcrLcxTXAwQYAOmM
 S5YliFNiAAAAAElFTkSuQmCC
 __template/tt2/edit_see_join_button_icon.html__
 <!-- BEGIN edit_see_join_button_icon.html -->
-SEE Join
+SubEtha Join
 <!-- END edit_see_join_button_icon.html -->
 
 __icons/gnome/template/edit_see_join_button_icon.html__
 <!-- BEGIN edit_see_join_button_icon.html -->
-<img src="icons/gnome/image/edit_see_join.png" alt="SEE Join" />
+<img src="icons/gnome/image/edit_see_join.png" alt="SubEtha Join" />
 <!-- END edit_see_join_button_icon.html -->
 
 __icons/gnome/image/edit_see_join.png__
@@ -361,7 +375,7 @@ ZzERIZDyM7wxhKqm2EivM5u8R9gUpu9i/5352OKKpMqpbyb+CqzO/Xnrt96JpWj88MNiJRfunwvN
 hgsXresFUWF+I4z4SxajkVFmPXeJCSsEx2N/a7kp4z+g+IjGesMdrwAAAABJRU5ErkJggg==
 __template/tt2/edit_see_locked_button_icon.html__
 <!-- BEGIN edit_see_locked_button_icon.html -->
-SEE Locked
+Locked
 <!-- END edit_see_locked_button_icon.html -->
 
 __template/tt2/edit_see_start_content.html__
@@ -370,7 +384,7 @@ __template/tt2/edit_see_start_content.html__
 The page will be shared in SubEthaEdit within a few seconds.
 </p>
 <ul>
-    <li><a href="[% see_url %]">Launch SubEthaEdit</a></li>
+    <li><a href="[% see_url %]"><strong>Launch SubEthaEdit</strong></a></li>
 </ul>
 <p>
 Go back to <a href="index.cgi?[% page_uri %]">[% page_name %]</a>.
@@ -379,7 +393,7 @@ Go back to <a href="index.cgi?[% page_uri %]">[% page_name %]</a>.
 
 __icons/gnome/template/edit_see_locked_button_icon.html__
 <!-- BEGIN edit_see_locked_button_icon.html -->
-<img src="icons/gnome/image/edit_see_locked.png" alt="SEE Locked" />
+<img src="icons/gnome/image/edit_see_locked.png" alt="Locked" />
 <!-- END edit_see_locked_button_icon.html -->
 
 __icons/gnome/image/edit_see_locked.png__
